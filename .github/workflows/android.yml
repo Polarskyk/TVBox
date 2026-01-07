@@ -1,0 +1,83 @@
+name: Android Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 11
+      uses: actions/setup-java@v4
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+        cache: gradle
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: Build with Gradle
+      run: ./gradlew assembleRelease --stacktrace
+      
+    - name: Sign APK (Normal)
+      id: sign_normal
+      uses: r0adkll/sign-android-release@v1
+      # 如果配置了 Secrets，则进行签名；否则跳过（注意：未签名的 APK 无法安装）
+      if: ${{ secrets.SIGNING_KEY != '' }}
+      with:
+        releaseDirectory: app/build/outputs/apk/normal/release
+        # 查找该目录下所有未签名 APK
+        signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+        alias: ${{ secrets.ALIAS }}
+        keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+        keyPassword: ${{ secrets.KEY_PASSWORD }}
+      continue-on-error: true
+
+    - name: Sign APK (Python)
+      id: sign_python
+      uses: r0adkll/sign-android-release@v1
+      if: ${{ secrets.SIGNING_KEY != '' }}
+      with:
+        releaseDirectory: app/build/outputs/apk/python/release
+        signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+        alias: ${{ secrets.ALIAS }}
+        keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+        keyPassword: ${{ secrets.KEY_PASSWORD }}
+      continue-on-error: true
+
+    - name: Organize Artifacts
+      run: |
+        mkdir -p release-artifacts
+        # 如果签名成功，移动签名后的文件；否则移动原始文件
+        find app/build/outputs/apk -name "*-signed.apk" -exec cp {} release-artifacts/ \;
+        if [ -z "$(ls -A release-artifacts)" ]; then
+           echo "No signed apks found, copying unsigned apks..."
+           find app/build/outputs/apk -name "*.apk" -exec cp {} release-artifacts/ \;
+        fi
+        
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: TVBox-APKs
+        path: release-artifacts/*.apk
+
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: release-artifacts/*.apk
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
