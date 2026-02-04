@@ -326,6 +326,15 @@ public class HomeActivity extends BaseActivity {
         }
         tvNameAnimation();
         showLoading();
+        if (!dataInitOk && !jarInitOk && Hawk.get(HawkConfig.DEFAULT_LOAD_LIVE, false) && !useCacheConfig && !isNetworkAvailable()) {
+            mHandler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    initData();
+                }
+            }, 1000);
+            return;
+        }
         if (dataInitOk && !jarInitOk) {
             if (!ApiConfig.get().getSpider().isEmpty()) {
                 ApiConfig.get().loadJar(useCacheConfig, ApiConfig.get().getSpider(), new ApiConfig.LoadConfigCallback() {
@@ -405,6 +414,15 @@ public class HomeActivity extends BaseActivity {
                             initData();
                         }
                     });
+                    return;
+                }
+                if (Hawk.get(HawkConfig.DEFAULT_LOAD_LIVE, false) && !useCacheConfig) {
+                    mHandler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            initData();
+                        }
+                    }, 1000);
                     return;
                 }
                 mHandler.post(new Runnable() {
@@ -874,5 +892,11 @@ public class HomeActivity extends BaseActivity {
         blinkAnimation.setRepeatMode(Animation.REVERSE);
         blinkAnimation.setRepeatCount(Animation.INFINITE);
         tvName.startAnimation(blinkAnimation);
+    }
+
+    private boolean isNetworkAvailable() {
+        android.net.ConnectivityManager cm = (android.net.ConnectivityManager) getSystemService(android.content.Context.CONNECTIVITY_SERVICE);
+        android.net.NetworkInfo netInfo = cm.getActiveNetworkInfo();
+        return netInfo != null && netInfo.isConnectedOrConnecting();
     }
 }
